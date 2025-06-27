@@ -159,15 +159,18 @@ if st.button("บันทึกคะแนน"):
             total_score, st.session_state.get("comment", "")
         ]
 
-try:
-    if existing_row:
-        sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
-        st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
-    else:
-        # ป้องกัน error จาก gspread/authorized session conflict
-        sheet.insert_row(new_row, index=len(all_values) + 1)
-        st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
-    st.cache_data.clear()
+    try:
+        if existing_row:
+            sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
+            st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
+        else:
+            # ป้องกัน error จาก gspread/authorized session conflict
+            sheet.insert_row(new_row, index=len(all_values) + 1)
+            st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
+        st.cache_data.clear()
+    except Exception as e:
+        st.error("❌ เกิดข้อผิดพลาดระหว่างบันทึก")
+        st.code(traceback.format_exc())
 
         except Exception as e:
             st.error("❌ เกิดข้อผิดพลาดระหว่างบันทึก")
