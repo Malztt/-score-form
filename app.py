@@ -15,7 +15,15 @@ creds = Credentials.from_service_account_info(
     st.secrets["gcp_service_account"], scopes=scope
 )
 client = gspread.authorize(creds)
-sheet = client.open_by_key("16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw").sheet1
+
+try:
+    spreadsheet = client.open_by_key("16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw")
+    st.success("✅ เชื่อมต่อ Google Sheets ได้สำเร็จ")
+    sheet = spreadsheet.worksheet("A1")  # หรือใช้ .sheet1 ถ้าชื่อแท็บคือ Sheet1
+except Exception as e:
+    st.error(f"❌ ไม่สามารถเชื่อม Google Sheets ได้: {e}")
+    st.stop()  # หยุดไม่ให้ทำงานต่อ
+
 # ข้อมูลทั่วไป
 col1, col2, col3 = st.columns(3)
 with col1:
