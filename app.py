@@ -15,7 +15,7 @@ creds = Credentials.from_service_account_info(
     st.secrets["gcp_service_account"], scopes=scope
 )
 client = gspread.authorize(creds)
-sheet = client.open("คะแนนสอบ").sheet1  # ใช้ชื่อ Google Sheet
+sheet = client.open("A1").sheet1  # ใช้ชื่อ Google Sheet
 
 # ข้อมูลทั่วไป
 col1, col2, col3 = st.columns(3)
