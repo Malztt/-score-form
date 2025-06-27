@@ -15,7 +15,7 @@ creds = Credentials.from_service_account_info(
     st.secrets["gcp_service_account"], scopes=scope
 )
 client = gspread.authorize(creds)
-sheet = client.open_by_key("16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw").worksheet("A1")
+sheet = client.open_by_key("16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw").sheet1
 # ข้อมูลทั่วไป
 col1, col2, col3 = st.columns(3)
 with col1:
