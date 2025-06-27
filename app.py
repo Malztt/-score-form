@@ -56,21 +56,28 @@ st.divider()
 st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
 
 # ===== หัวข้อการประเมิน (ย่อเพื่อความกระชับ) =====
-def slider_group(title, sliders):
+# เปลี่ยนจาก slider เป็น radio (ปุ่มวงกลม)
+def radio_group(title, questions):
     st.markdown(f"### {title}")
-    return sum([st.slider(q, 0, 5) for q in sliders])
+    total = 0
+    for q in questions:
+        score = st.radio(q, [0, 1, 2, 3, 4, 5], horizontal=True, index=0, key=q)
+        total += score
+    return total
 
-sum1 = slider_group("1. ลักษณะท่าทางและระเบียบวินัย", [
+# เรียกใช้ radio_group แทนเดิม
+sum1 = radio_group("1. ลักษณะท่าทางและระเบียบวินัย", [
     "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์"])
-sum2 = slider_group("2. ปฏิกิริยาไหวพริบ", [
+sum2 = radio_group("2. ปฏิกิริยาไหวพริบ", [
     "2.1 ตอบเร็ว", "2.2 เหมาะสม", "2.3 มั่นใจ", "2.4 เข้าใจง่าย"])
-sum3 = slider_group("3. การใช้ความรู้", [
+sum3 = radio_group("3. การใช้ความรู้", [
     "3.1 ตรงคำถาม", "3.2 จากประสบการณ์", "3.3 มีเหตุผล", "3.4 ใช้ภาษาเหมาะสม"])
-sum4 = slider_group("4. ประสบการณ์", [
+sum4 = radio_group("4. ประสบการณ์", [
     "4.1 คิดเชิงระบบ", "4.2 มีเป้าหมาย", "4.3 วางแผนดี"])
-sum5 = slider_group("5. วิชาทหาร/คุณธรรม", [
+sum5 = radio_group("5. วิชาทหาร/คุณธรรม", [
     "5.1 รู้เรื่องกองทัพ", "5.2 ทัศนคติดี", "5.3 มีจริยธรรม"])
 
+# รวมคะแนน
 total_score = sum1 + sum2 + sum3 + sum4 + sum5
 st.success(f"คะแนนรวมทั้งหมด: {total_score} คะแนน")
 
