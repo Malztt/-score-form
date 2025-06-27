@@ -40,8 +40,6 @@ def load_exam_data():
     return pd.read_csv("exam_schedule.csv", dtype=str)
 
 data = load_exam_data()
-
-# สร้าง dictionary จาก exam_id เพื่อดึงชื่อและเวลาสอบ
 exam_dict = dict(zip(data["exam_id"], zip(data["name"], data["time"])))
 
 # ฟอร์มเลือกข้อมูลทั่วไป
@@ -53,7 +51,24 @@ with col2:
 with col3:
     exam_date = st.date_input("วันที่สอบ", datetime.today())
 
-# ดึงชื่อและเวลาสอบอัตโนมัติจาก CSV
+# รีเซตฟอร์มเมื่อเปลี่ยนรหัส
+def reset_form():
+    for key in list(st.session_state.keys()):
+        if key.startswith("1.") or key.startswith("2.") or key.startswith("3.") or \
+           key.startswith("4.") or key.startswith("5.") or key == "comment":
+            del st.session_state[key]
+
+if "last_exam_id" not in st.session_state:
+    st.session_state.last_exam_id = exam_id
+if "last_committee_id" not in st.session_state:
+    st.session_state.last_committee_id = committee_id
+
+if exam_id != st.session_state.last_exam_id or committee_id != st.session_state.last_committee_id:
+    reset_form()
+    st.session_state.last_exam_id = exam_id
+    st.session_state.last_committee_id = committee_id
+
+# ดึงชื่อและเวลาสอบจาก CSV
 default_name, default_time = exam_dict.get(exam_id, ("", ""))
 
 col4, col5 = st.columns(2)
@@ -65,12 +80,34 @@ with col5:
 st.divider()
 st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
 
-# ใช้ radio แทน slider
+# โหลดข้อมูลเดิมถ้ามี
+existing_row = find_existing_row(sheet, exam_id, committee_id)
+if existing_row:
+    existing_data = sheet.get_all_values()[existing_row - 1]
+    if len(existing_data) >= 13:
+        try:
+            keys = [
+                "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์",
+                "2.1 ตอบเร็ว", "2.2 เหมาะสม", "2.3 มั่นใจ", "2.4 เข้าใจง่าย",
+                "3.1 ตรงคำถาม", "3.2 จากประสบการณ์", "3.3 มีเหตุผล", "3.4 ใช้ภาษาเหมาะสม",
+                "4.1 คิดเชิงระบบ", "4.2 มีเป้าหมาย", "4.3 วางแผนดี",
+                "5.1 รู้เรื่องกองทัพ", "5.2 ทัศนคติดี", "5.3 มีจริยธรรม"
+            ]
+            scores = list(map(int, existing_data[5:5+len(keys)]))
+            for k, v in zip(keys, scores):
+                st.session_state[k] = v
+            st.session_state["comment"] = existing_data[12]
+            st.info("⚠️ พบข้อมูลเดิม กำลังโหลดขึ้นมา")
+        except Exception:
+            st.warning("⚠️ โหลดข้อมูลเก่าไม่สำเร็จ")
+
+# ฟังก์ชันให้คะแนน
 def radio_group(title, questions):
     st.markdown(f"### {title}")
     total = 0
     for q in questions:
-        score = st.radio(q, [0, 1, 2, 3, 4, 5], horizontal=True, index=0, key=q)
+        score = st.radio(q, [0, 1, 2, 3, 4, 5], horizontal=True,
+                         index=st.session_state.get(q, 0), key=q)
         total += score
     return total
 
@@ -89,7 +126,7 @@ sum5 = radio_group("5. วิชาทหาร/คุณธรรม", [
 total_score = sum1 + sum2 + sum3 + sum4 + sum5
 st.success(f"คะแนนรวมทั้งหมด: {total_score} คะแนน")
 
-comment = st.text_area("ความคิดเห็นเพิ่มเติม", "")
+comment = st.text_area("ความคิดเห็นเพิ่มเติม", value=st.session_state.get("comment", ""), key="comment")
 
 if st.button("บันทึกคะแนน"):
     new_row = [
@@ -98,8 +135,6 @@ if st.button("บันทึกคะแนน"):
         sum1, sum2, sum3, sum4, sum5,
         total_score, comment
     ]
-
-    existing_row = find_existing_row(sheet, exam_id, committee_id)
 
     if existing_row:
         sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
