@@ -25,6 +25,17 @@ except Exception as e:
     st.error("❌ ไม่สามารถเชื่อม Google Sheets ได้:")
     st.code(traceback.format_exc())  # แสดงข้อความ error แบบเต็ม
     st.stop()
+         
+# โหลดข้อมูลผู้เข้าสอบจาก CSV
+df = pd.read_csv("exam_schedule.csv")
+
+# เลือกเลขประจำตัวสอบ
+exam_id = st.selectbox("เลือกเลขประจำตัวสอบ", df["exam_id"])
+
+# ดึงข้อมูลจากแถวที่เลือก
+selected = df[df["exam_id"] == exam_id].iloc[0]
+name = st.text_input("ชื่อผู้เข้าสอบ", selected["name"])
+time = st.text_input("เวลาสอบ", selected["time"])
 
 # ข้อมูลทั่วไป
 col1, col2, col3 = st.columns(3)
