@@ -17,32 +17,29 @@ creds = Credentials.from_service_account_info(
 )
 client = gspread.authorize(creds)
 
-# โหลดชีตด้วย cache
+# โหลดชีต
 @st.cache_data
 def get_worksheet(sheet_id: str, worksheet_name: str = "A1"):
     spreadsheet = client.open_by_key(sheet_id)
     worksheet = spreadsheet.worksheet(worksheet_name)
     return worksheet
 
-# โหลดข้อมูลจากชีตด้วย cache
+# โหลดข้อมูลจากชีต (แก้ param เป็น _sheet เพื่อไม่ให้ Streamlit hash มัน)
 @st.cache_data
-def load_all_records(sheet):
-    return sheet.get_all_records()
+def load_all_records(_sheet):
+    return _sheet.get_all_records()
 
 @st.cache_data
-def load_all_values(sheet):
-    return sheet.get_all_values()
+def load_all_values(_sheet):
+    return _sheet.get_all_values()
 
-# โหลด CSV schedule
 @st.cache_data
 def load_exam_data():
     return pd.read_csv("exam_schedule.csv", dtype=str)
 
-# ค่าคงที่
 SHEET_ID = "16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw"
 SHEET_NAME = "A1"
 
-# เริ่มโหลดชีต
 try:
     sheet = get_worksheet(SHEET_ID, SHEET_NAME)
     records = load_all_records(sheet)
@@ -53,12 +50,10 @@ except Exception:
     st.code(traceback.format_exc())
     st.stop()
 
-# -----------------------------
-# เรียกข้อมูลจาก CSV
+# ----------------------------
 data = load_exam_data()
 exam_dict = dict(zip(data["exam_id"], zip(data["name"], data["time"])))
 
-# ฟอร์มเลือก
 col1, col2, col3 = st.columns(3)
 with col1:
     exam_id = st.selectbox("เลือกเลขประจำตัวสอบ", list(exam_dict.keys()))
@@ -67,7 +62,6 @@ with col2:
 with col3:
     exam_date = st.date_input("วันที่สอบ", datetime.today())
 
-# รีเซต form เมื่อเปลี่ยนรหัส
 def reset_form():
     for k in list(st.session_state.keys()):
         if k.startswith(("1.", "2.", "3.", "4.", "5.")) or k in ["comment", "confirm_edit"]:
@@ -83,7 +77,6 @@ if exam_id != st.session_state.last_exam_id or committee_id != st.session_state.
     st.session_state.last_exam_id = exam_id
     st.session_state.last_committee_id = committee_id
 
-# แสดงชื่อและเวลา
 default_name, default_time = exam_dict.get(exam_id, ("", ""))
 col4, col5 = st.columns(2)
 with col4:
@@ -94,7 +87,6 @@ with col5:
 st.divider()
 st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
 
-# หัวข้อทั้งหมด
 score_keys = [
     "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์",
     "2.1 ตอบเร็ว", "2.2 เหมาะสม", "2.3 มั่นใจ", "2.4 เข้าใจง่าย",
@@ -103,7 +95,6 @@ score_keys = [
     "5.1 รู้เรื่องกองทัพ", "5.2 ทัศนคติดี", "5.3 มีจริยธรรม"
 ]
 
-# ค้นหา row
 def find_existing_row():
     for i, row in enumerate(records, start=2):
         if str(row.get("exam_id", "")) == exam_id and str(row.get("committee_id", "")) == committee_id:
@@ -113,7 +104,6 @@ def find_existing_row():
 existing_row = find_existing_row()
 existing_data = []
 
-# โหลดคะแนนเดิม
 if existing_row:
     existing_data = all_values[existing_row - 1]
     try:
@@ -125,7 +115,6 @@ if existing_row:
     except:
         st.warning("⚠️ โหลดข้อมูลเก่าไม่สำเร็จ")
 
-# แสดงกลุ่มให้คะแนน
 def radio_group(title, keys):
     st.markdown(f"### {title}")
     total = 0
@@ -145,11 +134,9 @@ st.success(f"คะแนนรวมทั้งหมด: {total_score} คะ
 
 comment = st.text_area("ความคิดเห็นเพิ่มเติม", value=st.session_state.get("comment", ""), key="comment")
 
-# ตรวจสอบเงื่อนไขก่อนบันทึก
 def has_unscored_questions():
     return any(st.session_state.get(k, 0) == 0 for k in score_keys)
 
-# ถ้ามีข้อมูลเดิม → ตรวจการเปลี่ยนแปลง
 confirm_edit = True
 if existing_row and len(existing_data) >= 13:
     old_scores = list(map(int, existing_data[5:5+18]))
@@ -159,7 +146,6 @@ if existing_row and len(existing_data) >= 13:
         confirm_edit = st.checkbox("ยืนยันว่าต้องการแก้ไขข้อมูลเดิม", key="confirm_edit")
         st.warning("⚠️ คุณกำลังจะแก้ไขข้อมูลเดิม กรุณายืนยันก่อนบันทึก")
 
-# บันทึก
 if st.button("บันทึกคะแนน"):
     if has_unscored_questions():
         st.error("❌ กรุณาให้คะแนนทุกข้อก่อนบันทึก")
@@ -180,7 +166,7 @@ if st.button("บันทึกคะแนน"):
             else:
                 sheet.append_row(new_row)
                 st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
-            st.cache_data.clear()  # รีโหลด cache ใหม่หลังบันทึก
+            st.cache_data.clear()  # รีโหลดข้อมูลครั้งหน้า
         except Exception as e:
             st.error("❌ เกิดข้อผิดพลาดระหว่างบันทึก")
             st.code(traceback.format_exc())
