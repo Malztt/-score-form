@@ -20,13 +20,12 @@ client = gspread.authorize(creds)
 try:
     spreadsheet = client.open_by_key("16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw")
     st.success("✅ เชื่อมต่อ Google Sheets ได้สำเร็จ")
-    sheet = spreadsheet.worksheet("A1")  # หรือ .sheet1 ถ้าใช้ default sheet
+    sheet = spreadsheet.worksheet("A1")
 except Exception as e:
     st.error("❌ ไม่สามารถเชื่อม Google Sheets ได้:")
     st.code(traceback.format_exc())
     st.stop()
 
-# ฟังก์ชันค้นหาแถวที่มีอยู่แล้ว
 def find_existing_row(sheet, exam_id, committee_id):
     records = sheet.get_all_records()
     for i, row in enumerate(records, start=2):  # row 1 เป็น header
@@ -34,7 +33,6 @@ def find_existing_row(sheet, exam_id, committee_id):
             return i
     return None
 
-# โหลดข้อมูลจาก CSV
 @st.cache_data
 def load_exam_data():
     return pd.read_csv("exam_schedule.csv", dtype=str)
@@ -54,8 +52,7 @@ with col3:
 # รีเซตฟอร์มเมื่อเปลี่ยนรหัส
 def reset_form():
     for key in list(st.session_state.keys()):
-        if key.startswith("1.") or key.startswith("2.") or key.startswith("3.") or \
-           key.startswith("4.") or key.startswith("5.") or key == "comment":
+        if key.startswith(("1.", "2.", "3.", "4.", "5.")) or key in ["comment", "confirm_edit"]:
             del st.session_state[key]
 
 if "last_exam_id" not in st.session_state:
@@ -68,7 +65,7 @@ if exam_id != st.session_state.last_exam_id or committee_id != st.session_state.
     st.session_state.last_exam_id = exam_id
     st.session_state.last_committee_id = committee_id
 
-# ดึงชื่อและเวลาสอบจาก CSV
+# ดึงชื่อและเวลาสอบ
 default_name, default_time = exam_dict.get(exam_id, ("", ""))
 
 col4, col5 = st.columns(2)
@@ -80,25 +77,28 @@ with col5:
 st.divider()
 st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
 
-# โหลดข้อมูลเดิมถ้ามี
+# โหลดข้อมูลเก่าหากมี
 existing_row = find_existing_row(sheet, exam_id, committee_id)
+existing_data = []
+
+score_keys = [
+    "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์",
+    "2.1 ตอบเร็ว", "2.2 เหมาะสม", "2.3 มั่นใจ", "2.4 เข้าใจง่าย",
+    "3.1 ตรงคำถาม", "3.2 จากประสบการณ์", "3.3 มีเหตุผล", "3.4 ใช้ภาษาเหมาะสม",
+    "4.1 คิดเชิงระบบ", "4.2 มีเป้าหมาย", "4.3 วางแผนดี",
+    "5.1 รู้เรื่องกองทัพ", "5.2 ทัศนคติดี", "5.3 มีจริยธรรม"
+]
+
 if existing_row:
     existing_data = sheet.get_all_values()[existing_row - 1]
     if len(existing_data) >= 13:
         try:
-            keys = [
-                "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์",
-                "2.1 ตอบเร็ว", "2.2 เหมาะสม", "2.3 มั่นใจ", "2.4 เข้าใจง่าย",
-                "3.1 ตรงคำถาม", "3.2 จากประสบการณ์", "3.3 มีเหตุผล", "3.4 ใช้ภาษาเหมาะสม",
-                "4.1 คิดเชิงระบบ", "4.2 มีเป้าหมาย", "4.3 วางแผนดี",
-                "5.1 รู้เรื่องกองทัพ", "5.2 ทัศนคติดี", "5.3 มีจริยธรรม"
-            ]
-            scores = list(map(int, existing_data[5:5+len(keys)]))
-            for k, v in zip(keys, scores):
+            scores = list(map(int, existing_data[5:5+len(score_keys)]))
+            for k, v in zip(score_keys, scores):
                 st.session_state[k] = v
             st.session_state["comment"] = existing_data[12]
             st.info("⚠️ พบข้อมูลเดิม กำลังโหลดขึ้นมา")
-        except Exception:
+        except:
             st.warning("⚠️ โหลดข้อมูลเก่าไม่สำเร็จ")
 
 # ฟังก์ชันให้คะแนน
@@ -111,34 +111,47 @@ def radio_group(title, questions):
         total += score
     return total
 
-# หัวข้อการประเมิน
-sum1 = radio_group("1. ลักษณะท่าทางและระเบียบวินัย", [
-    "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์"])
-sum2 = radio_group("2. ปฏิกิริยาไหวพริบ", [
-    "2.1 ตอบเร็ว", "2.2 เหมาะสม", "2.3 มั่นใจ", "2.4 เข้าใจง่าย"])
-sum3 = radio_group("3. การใช้ความรู้", [
-    "3.1 ตรงคำถาม", "3.2 จากประสบการณ์", "3.3 มีเหตุผล", "3.4 ใช้ภาษาเหมาะสม"])
-sum4 = radio_group("4. ประสบการณ์", [
-    "4.1 คิดเชิงระบบ", "4.2 มีเป้าหมาย", "4.3 วางแผนดี"])
-sum5 = radio_group("5. วิชาทหาร/คุณธรรม", [
-    "5.1 รู้เรื่องกองทัพ", "5.2 ทัศนคติดี", "5.3 มีจริยธรรม"])
+sum1 = radio_group("1. ลักษณะท่าทางและระเบียบวินัย", score_keys[0:4])
+sum2 = radio_group("2. ปฏิกิริยาไหวพริบ", score_keys[4:8])
+sum3 = radio_group("3. การใช้ความรู้", score_keys[8:12])
+sum4 = radio_group("4. ประสบการณ์", score_keys[12:15])
+sum5 = radio_group("5. วิชาทหาร/คุณธรรม", score_keys[15:18])
 
 total_score = sum1 + sum2 + sum3 + sum4 + sum5
 st.success(f"คะแนนรวมทั้งหมด: {total_score} คะแนน")
 
 comment = st.text_area("ความคิดเห็นเพิ่มเติม", value=st.session_state.get("comment", ""), key="comment")
 
-if st.button("บันทึกคะแนน"):
-    new_row = [
-        exam_id, committee_id, name,
-        exam_date.strftime('%Y-%m-%d'), time,
-        sum1, sum2, sum3, sum4, sum5,
-        total_score, comment
-    ]
+# ตรวจว่ามีข้อไหนยังไม่ได้ให้คะแนน
+def has_unscored_questions():
+    return any(st.session_state.get(k, 0) == 0 for k in score_keys)
 
-    if existing_row:
-        sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
-        st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
+# ตรวจว่ามีการแก้ไขจากของเดิมหรือไม่
+confirm_edit = True
+if existing_row and len(existing_data) >= 13:
+    old_scores = list(map(int, existing_data[5:5+18]))
+    current_scores = [st.session_state.get(k, 0) for k in score_keys]
+    old_comment = existing_data[12]
+    if old_scores != current_scores or old_comment != st.session_state.get("comment", ""):
+        confirm_edit = st.checkbox("ยืนยันว่าต้องการแก้ไขข้อมูลเดิม", key="confirm_edit")
+        st.warning("⚠️ คุณกำลังจะแก้ไขข้อมูลเดิม กรุณายืนยันก่อนบันทึก")
+
+if st.button("บันทึกคะแนน"):
+    if has_unscored_questions():
+        st.error("❌ กรุณาให้คะแนนทุกข้อก่อนบันทึก")
+    elif existing_row and not confirm_edit:
+        st.warning("⚠️ กรุณาติ๊กยืนยันว่าต้องการแก้ไขข้อมูลเดิมก่อน")
     else:
-        sheet.append_row(new_row)
-        st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
+        new_row = [
+            exam_id, committee_id, name,
+            exam_date.strftime('%Y-%m-%d'), time,
+            sum1, sum2, sum3, sum4, sum5,
+            total_score, st.session_state.get("comment", "")
+        ]
+
+        if existing_row:
+            sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
+            st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
+        else:
+            sheet.append_row(new_row)
+            st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
