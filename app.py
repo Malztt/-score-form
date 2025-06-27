@@ -23,9 +23,17 @@ try:
     sheet = spreadsheet.worksheet("A1")  # หรือ .sheet1 ถ้าใช้ default sheet
 except Exception as e:
     st.error("❌ ไม่สามารถเชื่อม Google Sheets ได้:")
-    st.code(traceback.format_exc())  # แสดงข้อความ error แบบเต็ม
+    st.code(traceback.format_exc())
     st.stop()
-         
+
+# ฟังก์ชันค้นหาแถวที่มีอยู่แล้ว
+def find_existing_row(sheet, exam_id, committee_id):
+    records = sheet.get_all_records()
+    for i, row in enumerate(records, start=2):  # row 1 เป็น header
+        if str(row.get("exam_id", "")) == exam_id and str(row.get("committee_id", "")) == committee_id:
+            return i
+    return None
+
 # โหลดข้อมูลจาก CSV
 @st.cache_data
 def load_exam_data():
@@ -57,8 +65,7 @@ with col5:
 st.divider()
 st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
 
-# ===== หัวข้อการประเมิน (ย่อเพื่อความกระชับ) =====
-# เปลี่ยนจาก slider เป็น radio (ปุ่มวงกลม)
+# ใช้ radio แทน slider
 def radio_group(title, questions):
     st.markdown(f"### {title}")
     total = 0
@@ -67,7 +74,7 @@ def radio_group(title, questions):
         total += score
     return total
 
-# เรียกใช้ radio_group แทนเดิม
+# หัวข้อการประเมิน
 sum1 = radio_group("1. ลักษณะท่าทางและระเบียบวินัย", [
     "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์"])
 sum2 = radio_group("2. ปฏิกิริยาไหวพริบ", [
@@ -79,7 +86,6 @@ sum4 = radio_group("4. ประสบการณ์", [
 sum5 = radio_group("5. วิชาทหาร/คุณธรรม", [
     "5.1 รู้เรื่องกองทัพ", "5.2 ทัศนคติดี", "5.3 มีจริยธรรม"])
 
-# รวมคะแนน
 total_score = sum1 + sum2 + sum3 + sum4 + sum5
 st.success(f"คะแนนรวมทั้งหมด: {total_score} คะแนน")
 
@@ -92,5 +98,12 @@ if st.button("บันทึกคะแนน"):
         sum1, sum2, sum3, sum4, sum5,
         total_score, comment
     ]
-    sheet.append_row(new_row)
-    st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
+
+    existing_row = find_existing_row(sheet, exam_id, committee_id)
+
+    if existing_row:
+        sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
+        st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
+    else:
+        sheet.append_row(new_row)
+        st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
