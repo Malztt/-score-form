@@ -39,7 +39,7 @@ exam_dict = dict(zip(data["exam_id"], zip(data["name"], data["time"])))
 # ดึงข้อมูลที่เคยกรอกไว้ (ถ้ามี)
 def get_existing_data(sheet, exam_id, committee_id):
     df = pd.DataFrame(sheet.get_all_records())
-    df.columns = df.columns.str.strip()  # ตัดช่องว่างเผื่อชื่อคอลัมน์ผิด
+    df.columns = pd.Series(df.columns).astype(str).str.strip()  # แปลงเป็น str แล้ว strip
     if "exam_id" in df.columns and "committee_id" in df.columns:
         match = df[(df["exam_id"] == exam_id) & (df["committee_id"] == committee_id)]
         if not match.empty:
