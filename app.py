@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
+import traceback
 
 st.set_page_config(page_title="ฟอร์มประเมินผู้เข้าสอบปี 2567", layout="wide")
 st.title("ฟอร์มประเมินผู้เข้าสอบปี 2567")
@@ -19,10 +20,11 @@ client = gspread.authorize(creds)
 try:
     spreadsheet = client.open_by_key("16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw")
     st.success("✅ เชื่อมต่อ Google Sheets ได้สำเร็จ")
-    sheet = spreadsheet.worksheet("A1")  # หรือใช้ .sheet1 ถ้าชื่อแท็บคือ Sheet1
+    sheet = spreadsheet.worksheet("A1")  # หรือ .sheet1 ถ้าใช้ default sheet
 except Exception as e:
-    st.error(f"❌ ไม่สามารถเชื่อม Google Sheets ได้: {e}")
-    st.stop()  # หยุดไม่ให้ทำงานต่อ
+    st.error("❌ ไม่สามารถเชื่อม Google Sheets ได้:")
+    st.code(traceback.format_exc())  # แสดงข้อความ error แบบเต็ม
+    st.stop()
 
 # ข้อมูลทั่วไป
 col1, col2, col3 = st.columns(3)
