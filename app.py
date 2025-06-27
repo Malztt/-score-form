@@ -91,6 +91,19 @@ st.success(f"คะแนนรวมทั้งหมด: {total_score} คะ
 
 comment = st.text_area("ความคิดเห็นเพิ่มเติม", "")
 
+# ตรวจสอบว่ามีข้อมูลเดิมหรือไม่
+existing_row = find_existing_row(sheet, exam_id, committee_id)
+confirm_update = None
+
+if existing_row:
+    st.warning("⚠️ มีการบันทึกคะแนนสำหรับเลขประจำตัวสอบนี้แล้วโดยกรรมการคนนี้")
+    confirm_update = st.radio(
+        "คุณต้องการอัปเดตคะแนนเดิมหรือไม่?",
+        ["ไม่", "ใช่"],
+        horizontal=True,
+        key="confirm_update_radio"
+    )
+
 if st.button("บันทึกคะแนน"):
     new_row = [
         exam_id, committee_id, name,
@@ -99,11 +112,20 @@ if st.button("บันทึกคะแนน"):
         total_score, comment
     ]
 
-    existing_row = find_existing_row(sheet, exam_id, committee_id)
-
-    if existing_row:
-        sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
-        st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
-    else:
-        sheet.append_row(new_row)
-        st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
+    try:
+        if existing_row:
+            if confirm_update == "ใช่":
+                sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
+                st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
+                st.toast("อัปเดตข้อมูลสำเร็จ", icon="🔄")
+                st.balloons()
+            else:
+                st.info("ℹ️ ยกเลิกการอัปเดตคะแนน")
+        else:
+            sheet.append_row(new_row)
+            st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
+            st.toast("บันทึกข้อมูลใหม่สำเร็จ", icon="📥")
+            st.balloons()
+    except Exception as e:
+        st.error("❌ เกิดข้อผิดพลาดระหว่างบันทึกข้อมูล")
+        st.code(traceback.format_exc())
