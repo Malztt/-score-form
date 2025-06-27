@@ -28,31 +28,31 @@ except Exception as e:
          
 # โหลดข้อมูลจาก CSV
 @st.cache_data
-def load_candidate_data():
-    return pd.read_csv("candidates.csv", dtype=str)
+def load_exam_data():
+    return pd.read_csv("exam_schedule.csv", dtype=str)
 
-candidates_df = load_candidate_data()
+data = load_exam_data()
 
-# เลือกเลขประจำตัวสอบ
+# สร้าง dictionary จาก exam_id เพื่อดึงชื่อและเวลาสอบ
+exam_dict = dict(zip(data["exam_id"], zip(data["name"], data["time"])))
+
+# ฟอร์มเลือกข้อมูลทั่วไป
 col1, col2, col3 = st.columns(3)
 with col1:
-    exam_id = st.selectbox("เลือกเลขประจำตัวสอบ", candidates_df["exam_id"])
-
-# ดึงข้อมูลจาก CSV ตาม exam_id ที่เลือก
-row = candidates_df[candidates_df["exam_id"] == exam_id].iloc[0]
-name = row["name"]
-time = row["time"]
-
+    exam_id = st.selectbox("เลือกเลขประจำตัวสอบ", list(exam_dict.keys()))
 with col2:
     committee_id = st.selectbox("กรรมการคนที่", ["1", "2", "3"])
 with col3:
     exam_date = st.date_input("วันที่สอบ", datetime.today())
 
+# ดึงชื่อและเวลาสอบอัตโนมัติจาก CSV
+default_name, default_time = exam_dict.get(exam_id, ("", ""))
+
 col4, col5 = st.columns(2)
 with col4:
-    st.text_input("ชื่อผู้เข้าสอบ", name, disabled=True)
+    name = st.text_input("ชื่อผู้เข้าสอบ", value=default_name)
 with col5:
-    st.text_input("เวลาสอบ", time, disabled=True)
+    time = st.text_input("เวลาสอบ", value=default_time)
 
 st.divider()
 st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
