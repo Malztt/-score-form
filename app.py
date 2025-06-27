@@ -9,9 +9,11 @@ st.set_page_config(page_title="ฟอร์มประเมินผู้เ�
 st.title("ฟอร์มประเมินผู้เข้าสอบปี 2567")
 
 # เชื่อม Google Sheets
-scope = ["https://www.googleapis.com/auth/spreadsheets",
-         "https://www.googleapis.com/auth/drive.file",
-         "https://www.googleapis.com/auth/drive"]
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",
+]
 creds = Credentials.from_service_account_info(
     st.secrets["gcp_service_account"], scopes=scope
 )
@@ -34,14 +36,23 @@ def load_exam_data():
 data = load_exam_data()
 exam_dict = dict(zip(data["exam_id"], zip(data["name"], data["time"])))
 
-# โหลดข้อมูลคะแนนเดิม
+# ===== ฟังก์ชัน =====
+def find_existing_row(sheet, exam_id, committee_id):
+    records = sheet.get_all_records()
+    for i, row in enumerate(records, start=2):
+        if str(row.get("exam_id", "")).strip() == str(exam_id) and str(row.get("committee_id", "")).strip() == str(committee_id):
+            return i
+    return None
+
 def get_existing_data(sheet, exam_id, committee_id):
     df = pd.DataFrame(sheet.get_all_records())
-    df.columns = df.columns.astype(str).str.strip().str.lower()
-    match = df[(df["exam_id"] == exam_id) & (df["committee_id"] == committee_id)]
-    return match.iloc[0] if not match.empty else None
+    df.columns = df.columns.astype(str).str.strip()
+    match = df[(df["exam_id"].astype(str) == exam_id) & (df["committee_id"].astype(str) == committee_id)]
+    if not match.empty:
+        return match.iloc[0].to_dict()
+    return {}
 
-# ----------------- ฟอร์มข้อมูลทั่วไป -----------------
+# ===== ฟอร์มข้อมูลทั่วไป =====
 col1, col2, col3 = st.columns(3)
 with col1:
     exam_id = st.selectbox("เลือกเลขประจำตัวสอบ", list(exam_dict.keys()))
@@ -50,55 +61,33 @@ with col2:
 with col3:
     exam_date = st.date_input("วันที่สอบ", datetime.today())
 
-# ดึงข้อมูลจากไฟล์ CSV
 default_name, default_time = exam_dict.get(exam_id, ("", ""))
-
-# โหลดข้อมูลเก่าจาก Google Sheets ถ้ามี
-existing = get_existing_data(sheet, exam_id, committee_id)
-
-# ค่าเริ่มต้น
-initial_scores = {}
-if existing is not None:
-    default_name = existing["name"]
-    default_time = existing["time"]
-    initial_scores = {
-        "1.1 ท่าทางสง่า": existing["sum1"] // 4,
-        "1.2 สะอาดเรียบร้อย": existing["sum1"] // 4,
-        "1.3 เคารพ": existing["sum1"] // 4,
-        "1.4 ควบคุมอารมณ์": existing["sum1"] - 3 * (existing["sum1"] // 4),
-        "2.1 ตอบเร็ว": existing["sum2"] // 4,
-        "2.2 เหมาะสม": existing["sum2"] // 4,
-        "2.3 มั่นใจ": existing["sum2"] // 4,
-        "2.4 เข้าใจง่าย": existing["sum2"] - 3 * (existing["sum2"] // 4),
-        "3.1 ตรงคำถาม": existing["sum3"] // 4,
-        "3.2 จากประสบการณ์": existing["sum3"] // 4,
-        "3.3 มีเหตุผล": existing["sum3"] // 4,
-        "3.4 ใช้ภาษาเหมาะสม": existing["sum3"] - 3 * (existing["sum3"] // 4),
-        "4.1 คิดเชิงระบบ": existing["sum4"] // 3,
-        "4.2 มีเป้าหมาย": existing["sum4"] // 3,
-        "4.3 วางแผนดี": existing["sum4"] - 2 * (existing["sum4"] // 3),
-        "5.1 รู้เรื่องกองทัพ": existing["sum5"] // 3,
-        "5.2 ทัศนคติดี": existing["sum5"] // 3,
-        "5.3 มีจริยธรรม": existing["sum5"] - 2 * (existing["sum5"] // 3),
-    }
+existing_data = get_existing_data(sheet, exam_id, committee_id)
 
 col4, col5 = st.columns(2)
 with col4:
-    name = st.text_input("ชื่อผู้เข้าสอบ", value=default_name)
+    name = st.text_input("ชื่อผู้เข้าสอบ", value=existing_data.get("name", default_name))
 with col5:
-    time = st.text_input("เวลาสอบ", value=default_time)
+    time = st.text_input("เวลาสอบ", value=existing_data.get("time", default_time))
 
 st.divider()
 st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
 
-# ฟังก์ชันรวมคะแนนจาก radio button
+# ===== การประเมินคะแนน =====
 def radio_group(title, questions):
     st.markdown(f"### {title}")
     total = 0
     for q in questions:
-        key = f"{exam_id}_{committee_id}_{q}"
-        score = st.radio(q, [0, 1, 2, 3, 4, 5], horizontal=True, key=key, index=initial_scores.get(q, 0))
+        key = f"{q}_{exam_id}_{committee_id}"
+        score = st.radio(
+            q,
+            [0, 1, 2, 3, 4, 5],
+            horizontal=True,
+            index=existing_data.get(q, 0) if isinstance(existing_data.get(q), int) else 0,
+            key=key
+        )
         total += score
+        st.session_state[key] = score
     return total
 
 sum1 = radio_group("1. ลักษณะท่าทางและระเบียบวินัย", [
@@ -115,9 +104,9 @@ sum5 = radio_group("5. วิชาทหาร/คุณธรรม", [
 total_score = sum1 + sum2 + sum3 + sum4 + sum5
 st.success(f"คะแนนรวมทั้งหมด: {total_score} คะแนน")
 
-comment = st.text_area("ความคิดเห็นเพิ่มเติม", value=existing["comment"] if existing is not None else "")
+comment = st.text_area("ความคิดเห็นเพิ่มเติม", value=existing_data.get("comment", ""))
 
-# บันทึกข้อมูล
+# ===== บันทึกหรืออัปเดต =====
 if st.button("บันทึกคะแนน"):
     new_row = [
         exam_id, committee_id, name,
@@ -125,13 +114,18 @@ if st.button("บันทึกคะแนน"):
         sum1, sum2, sum3, sum4, sum5,
         total_score, comment
     ]
+
     existing_row = find_existing_row(sheet, exam_id, committee_id)
+
     if existing_row:
         sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
         st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
     else:
         sheet.append_row(new_row)
-        st.success("✅ บันทึกคะแนนเรียบร้อยแล้วใน Google Sheets!")
+        st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
 
-    st.session_state.clear()
+    # Reset radio fields
+    for k in list(st.session_state.keys()):
+        if exam_id in k and committee_id in k:
+            del st.session_state[k]
     st.experimental_rerun()
