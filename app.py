@@ -25,7 +25,7 @@ def connect_sheet():
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_KEY)
         return spreadsheet.worksheet(WORKSHEET_NAME)
-    except Exception as e:
+    except Exception:
         st.error("❌ ไม่สามารถเชื่อม Google Sheets ได้:")
         st.code(traceback.format_exc())
         st.stop()
@@ -98,14 +98,19 @@ def clear_scores_session_state():
         st.session_state[q] = 0
     st.session_state["comment"] = ""
 
+# Track previous exam_id and committee_id to detect change
 if "prev_exam_id" not in st.session_state:
     st.session_state["prev_exam_id"] = None
 if "prev_committee_id" not in st.session_state:
     st.session_state["prev_committee_id"] = None
+if "confirm_update_radio" not in st.session_state:
+    st.session_state["confirm_update_radio"] = "ไม่"  # default no update
 
+# If changed exam_id or committee_id, load/reset scores
 if (st.session_state["prev_exam_id"] != exam_id) or (st.session_state["prev_committee_id"] != committee_id):
     st.session_state["prev_exam_id"] = exam_id
     st.session_state["prev_committee_id"] = committee_id
+    st.session_state["confirm_update_radio"] = "ไม่"  # reset confirm update
 
     if record:
         load_scores_to_session(record)
@@ -150,17 +155,21 @@ def find_existing_row(records, exam_id, committee_id):
     return None
 
 existing_row = find_existing_row(records, exam_id, committee_id)
-confirm_update = None
 
+# ---------- CONFIRM UPDATE RADIO ----------
 if existing_row:
     st.warning("⚠️ มีการบันทึกคะแนนสำหรับเลขประจำตัวสอบนี้แล้วโดยกรรมการคนนี้")
-    confirm_update = st.radio(
+    st.session_state["confirm_update_radio"] = st.radio(
         "คุณต้องการอัปเดตคะแนนเดิมหรือไม่?",
         ["ไม่", "ใช่"],
         horizontal=True,
-        key="confirm_update_radio"
+        key="confirm_update_radio",
+        index=0 if st.session_state.get("confirm_update_radio") == "ไม่" else 1
     )
+else:
+    st.session_state["confirm_update_radio"] = "ไม่"  # reset if no existing record
 
+# ---------- HELPER FUNCTION TO CONVERT COLUMN NUMBER TO LETTER ----------
 def col_num_to_letter(n):
     string = ""
     while n > 0:
@@ -168,7 +177,7 @@ def col_num_to_letter(n):
         string = chr(65 + remainder) + string
     return string
 
-# ---------- SUBMIT ----------
+# ---------- SUBMIT BUTTON ----------
 if st.button("บันทึกคะแนน"):
     new_row = [
         exam_id, committee_id, name,
@@ -181,7 +190,7 @@ if st.button("บันทึกคะแนน"):
         new_row.append(st.session_state[q])
 
     try:
-        if existing_row and confirm_update == "ใช่":
+        if existing_row and st.session_state.get("confirm_update_radio") == "ใช่":
             end_col = col_num_to_letter(len(new_row))
             sheet.update(f"A{existing_row}:{end_col}{existing_row}", [new_row])
             st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
