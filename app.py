@@ -95,14 +95,28 @@ def load_scores_to_session(record):
     if "comment" not in st.session_state:
         st.session_state["comment"] = record.get("comment", "")
 
+def clear_scores_session_state():
+    for q in all_questions:
+        st.session_state[q] = 0
+    st.session_state["comment"] = ""
+
+# เช็คและเคลียร์ session_state เมื่อเปลี่ยน exam_id หรือ committee_id
+if "prev_exam_id" not in st.session_state:
+    st.session_state["prev_exam_id"] = None
+if "prev_committee_id" not in st.session_state:
+    st.session_state["prev_committee_id"] = None
+
+if (st.session_state["prev_exam_id"] != exam_id) or (st.session_state["prev_committee_id"] != committee_id):
+    clear_scores_session_state()
+    st.session_state["prev_exam_id"] = exam_id
+    st.session_state["prev_committee_id"] = committee_id
+
+# โหลดคะแนนถ้ามี record จริง
 if record:
     load_scores_to_session(record)
 else:
-    for q in all_questions:
-        if q not in st.session_state:
-            st.session_state[q] = 0
-    if "comment" not in st.session_state:
-        st.session_state["comment"] = ""
+    # ถ้าไม่มี record ให้ตั้งเป็น 0 แต่ session_state อาจเคลียร์ไปแล้วข้างบน
+    pass
 
 # ---------- RADIO GROUP ----------
 def radio_group(title, questions):
