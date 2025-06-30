@@ -26,9 +26,13 @@ except Exception as e:
     st.code(traceback.format_exc())
     st.stop()
 
-# ฟังก์ชันค้นหาแถวที่มีอยู่แล้ว
-def find_existing_row(sheet, exam_id, committee_id):
-    records = sheet.get_all_records()
+# ฟังก์ชันโหลดข้อมูลจาก Sheet (cache ไว้ 5 นาที)
+@st.cache_data(ttl=300)
+def load_existing_records(sheet):
+    return sheet.get_all_records()
+
+# ฟังก์ชันค้นหาแถว
+def find_existing_row(records, exam_id, committee_id):
     for i, row in enumerate(records, start=2):  # row 1 เป็น header
         if str(row.get("exam_id", "")) == exam_id and str(row.get("committee_id", "")) == committee_id:
             return i
@@ -91,8 +95,9 @@ st.success(f"คะแนนรวมทั้งหมด: {total_score} คะ
 
 comment = st.text_area("ความคิดเห็นเพิ่มเติม", "")
 
-# ตรวจสอบว่ามีข้อมูลเดิมหรือไม่
-existing_row = find_existing_row(sheet, exam_id, committee_id)
+# โหลดข้อมูลเดิมจาก Sheet (ครั้งเดียว)
+records = load_existing_records(sheet)
+existing_row = find_existing_row(records, exam_id, committee_id)
 confirm_update = None
 
 if existing_row:
