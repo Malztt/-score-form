@@ -125,7 +125,7 @@ def radio_group(title, questions):
         score = st.radio(
             q,
             options=[0, 1, 2, 3, 4, 5],
-            value=st.session_state.get(q, 0),
+            index=st.session_state.get(q, 0),
             horizontal=True,
             key=q
         )
