@@ -11,7 +11,7 @@ st.title("ฟอร์มประเมินผู้เข้าสอบป�
 SPREADSHEET_KEY = "16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw"
 WORKSHEET_NAME = "A1"
 
-# ---------- CONNECT TO GOOGLE SHEET ----------
+# ฟังก์ชันเชื่อม Google Sheets
 def connect_sheet():
     try:
         scope = [
@@ -25,7 +25,7 @@ def connect_sheet():
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(SPREADSHEET_KEY)
         return spreadsheet.worksheet(WORKSHEET_NAME)
-    except Exception:
+    except Exception as e:
         st.error("❌ ไม่สามารถเชื่อม Google Sheets ได้:")
         st.code(traceback.format_exc())
         st.stop()
@@ -33,16 +33,24 @@ def connect_sheet():
 sheet = connect_sheet()
 st.success("✅ เชื่อมต่อ Google Sheets ได้สำเร็จ")
 
-# ---------- CACHE EXISTING RECORDS ----------
+# โหลดข้อมูลจาก Sheet (Cache 5 นาที)
 @st.cache_data(ttl=300)
 def load_existing_records():
     try:
         sheet_cached = connect_sheet()
         return sheet_cached.get_all_records()
-    except Exception:
+    except Exception as e:
+        st.warning("⚠️ โหลดข้อมูลเก่าล้มเหลว (แต่อาจยังเขียนได้)")
         return []
 
-# ---------- LOAD EXAM CSV ----------
+# ค้นหาแถวที่มีข้อมูลเดิม
+def find_existing_row(records, exam_id, committee_id):
+    for i, row in enumerate(records, start=2):  # row 1 เป็น header
+        if str(row.get("exam_id", "")) == exam_id and str(row.get("committee_id", "")) == committee_id:
+            return i
+    return None
+
+# โหลดตารางสอบจาก CSV
 @st.cache_data
 def load_exam_data():
     return pd.read_csv("exam_schedule.csv", dtype=str)
@@ -50,19 +58,7 @@ def load_exam_data():
 data = load_exam_data()
 exam_dict = dict(zip(data["exam_id"], zip(data["name"], data["time"])))
 
-# ---------- NEW EVALUATION QUESTIONS ----------
-all_questions = [
-    "1.1 บุคลิกภาพ, รูปร่างเหมาะสม", "1.2 การวางตัวเหมาะสม", "1.3 การใช้คำพูด ชัดเจน", "1.4 ความถูกต้องของภาษาพูด",
-    "2.1 ตอบคำถามได้รวดเร็ว", "2.2 ตอบคำถามได้เหมาะสม", "2.3 แสดงความมั่นใจในการตอบคำถาม", "2.4 การแก้ไขปัญหาเฉพาะหน้า",
-    "3.1 การใช้หลักวิชาการแก้ปัญหา", "3.2 มีความเข้าใจงานที่ต้องทำ และมีแนวทางพัฒนา", 
-    "3.3 มีความรอบรู้เกี่ยวกับสังคมไทย สังคมโลก และกองทัพอากาศ", "3.4 มีความสนใจติดตามข่าวสารและเทคโนโลยีสารสนเทศ",
-    "4.1 มีวิธีคิดของตนเองอย่างเป็นระบบ", "4.2 มีเป้าหมายในการดำเนินชีวิต", 
-    "4.3 มีการกำหนดเป้าหมายในการทำงาน", "4.4 แสดงความภูมิใจในตนเอง/ครอบครัว",
-    "5.1 มีค่านิยมและทัศนคติที่ดีต่อการเป็นทหาร", "5.2 การยอมรับกฎเกณฑ์และการปฏิบัติตามคำสั่ง", 
-    "5.3 มีความสามารถในการควบคุมอารมณ์", "5.4 มีการจัดการกับอารมณ์ของตนเองอย่างเหมาะสม"
-]
-
-# ---------- FORM SECTION ----------
+# ===== ฟอร์มข้อมูลทั่วไป =====
 col1, col2, col3 = st.columns(3)
 with col1:
     exam_id = st.selectbox("เลือกเลขประจำตัวสอบ", list(exam_dict.keys()))
@@ -78,106 +74,49 @@ with col4:
 with col5:
     time = st.text_input("เวลาสอบ", value=default_time)
 
-# ---------- LOAD SCORES OR RESET ----------
-records = load_existing_records()
-record = next(
-    (r for r in records if str(r.get("exam_id")) == exam_id and str(r.get("committee_id")) == committee_id),
-    None
-)
+st.divider()
+st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
 
-def load_scores_to_session(record):
-    for q in all_questions:
-        try:
-            st.session_state[q] = int(record.get(q, 0))
-        except:
-            st.session_state[q] = 0
-    st.session_state["comment"] = record.get("comment", "")
-
-def clear_scores_session_state():
-    for q in all_questions:
-        st.session_state[q] = 0
-    st.session_state["comment"] = ""
-
-# Track previous exam_id and committee_id to detect change
-if "prev_exam_id" not in st.session_state:
-    st.session_state["prev_exam_id"] = None
-if "prev_committee_id" not in st.session_state:
-    st.session_state["prev_committee_id"] = None
-if "confirm_update_radio" not in st.session_state:
-    st.session_state["confirm_update_radio"] = "ไม่"  # default no update
-
-# If changed exam_id or committee_id, load/reset scores
-if (st.session_state["prev_exam_id"] != exam_id) or (st.session_state["prev_committee_id"] != committee_id):
-    st.session_state["prev_exam_id"] = exam_id
-    st.session_state["prev_committee_id"] = committee_id
-    st.session_state["confirm_update_radio"] = "ไม่"  # reset confirm update
-
-    if record:
-        load_scores_to_session(record)
-    else:
-        clear_scores_session_state()
-
-# ---------- RADIO GROUP ----------
+# ===== แบบประเมิน =====
 def radio_group(title, questions):
     st.markdown(f"### {title}")
     total = 0
     for q in questions:
-        score = st.radio(
-            q,
-            options=[0, 1, 2, 3, 4, 5],
-            value=st.session_state.get(q, 0),
-            horizontal=True,
-            key=q
-        )
+        score = st.radio(q, [0, 1, 2, 3, 4, 5], horizontal=True, index=0, key=q)
         total += score
     return total
 
-st.divider()
-st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
-
-sum1 = radio_group("1. บุคลิกภาพและการพูด", all_questions[0:4])
-sum2 = radio_group("2. ปฏิภาณไหวพริบ", all_questions[4:8])
-sum3 = radio_group("3. ความรู้และความเข้าใจ", all_questions[8:12])
-sum4 = radio_group("4. เป้าหมายและทัศนคติ", all_questions[12:16])
-sum5 = radio_group("5. คุณธรรม/จริยธรรมทหาร", all_questions[16:20])
+sum1 = radio_group("1. ลักษณะท่าทางและระเบียบวินัย", [
+    "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์"])
+sum2 = radio_group("2. ปฏิกิริยาไหวพริบ", [
+    "2.1 ตอบเร็ว", "2.2 เหมาะสม", "2.3 มั่นใจ", "2.4 เข้าใจง่าย"])
+sum3 = radio_group("3. การใช้ความรู้", [
+    "3.1 ตรงคำถาม", "3.2 จากประสบการณ์", "3.3 มีเหตุผล", "3.4 ใช้ภาษาเหมาะสม"])
+sum4 = radio_group("4. ประสบการณ์", [
+    "4.1 คิดเชิงระบบ", "4.2 มีเป้าหมาย", "4.3 วางแผนดี"])
+sum5 = radio_group("5. วิชาทหาร/คุณธรรม", [
+    "5.1 รู้เรื่องกองทัพ", "5.2 ทัศนคติดี", "5.3 มีจริยธรรม"])
 
 total_score = sum1 + sum2 + sum3 + sum4 + sum5
 st.success(f"คะแนนรวมทั้งหมด: {total_score} คะแนน")
 
-comment = st.text_area("ความคิดเห็นเพิ่มเติม", st.session_state.get("comment", ""))
-st.session_state["comment"] = comment
+comment = st.text_area("ความคิดเห็นเพิ่มเติม", "")
 
-# ---------- FIND ROW ----------
-def find_existing_row(records, exam_id, committee_id):
-    for i, row in enumerate(records, start=2):  # header is row 1
-        if str(row.get("exam_id", "")) == exam_id and str(row.get("committee_id", "")) == committee_id:
-            return i
-    return None
-
+# ===== ตรวจสอบข้อมูลซ้ำ =====
+records = load_existing_records()
 existing_row = find_existing_row(records, exam_id, committee_id)
+confirm_update = None
 
-# ---------- CONFIRM UPDATE RADIO ----------
 if existing_row:
     st.warning("⚠️ มีการบันทึกคะแนนสำหรับเลขประจำตัวสอบนี้แล้วโดยกรรมการคนนี้")
-    st.session_state["confirm_update_radio"] = st.radio(
+    confirm_update = st.radio(
         "คุณต้องการอัปเดตคะแนนเดิมหรือไม่?",
         ["ไม่", "ใช่"],
         horizontal=True,
-        key="confirm_update_radio",
-        index=0 if st.session_state.get("confirm_update_radio") == "ไม่" else 1
+        key="confirm_update_radio"
     )
-else:
-    st.session_state["confirm_update_radio"] = "ไม่"  # reset if no existing record
 
-# ---------- HELPER FUNCTION TO CONVERT COLUMN NUMBER TO LETTER ----------
-def col_num_to_letter(n):
-    string = ""
-    while n > 0:
-        n, remainder = divmod(n - 1, 26)
-        string = chr(65 + remainder) + string
-    return string
-
-# ---------- SUBMIT BUTTON ----------
+# ===== บันทึกข้อมูล =====
 if st.button("บันทึกคะแนน"):
     new_row = [
         exam_id, committee_id, name,
@@ -186,13 +125,9 @@ if st.button("บันทึกคะแนน"):
         total_score, comment
     ]
 
-    for q in all_questions:
-        new_row.append(st.session_state[q])
-
     try:
-        if existing_row and st.session_state.get("confirm_update_radio") == "ใช่":
-            end_col = col_num_to_letter(len(new_row))
-            sheet.update(f"A{existing_row}:{end_col}{existing_row}", [new_row])
+        if existing_row and confirm_update == "ใช่":
+            sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
             st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
             st.toast("อัปเดตข้อมูลสำเร็จ", icon="🔄")
             st.balloons()
@@ -203,6 +138,6 @@ if st.button("บันทึกคะแนน"):
             st.balloons()
         else:
             st.info("ℹ️ ยกเลิกการอัปเดตคะแนน")
-    except Exception:
+    except Exception as e:
         st.error("❌ เกิดข้อผิดพลาดระหว่างบันทึกข้อมูล")
         st.code(traceback.format_exc())
