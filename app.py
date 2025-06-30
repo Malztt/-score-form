@@ -8,47 +8,57 @@ import traceback
 st.set_page_config(page_title="ฟอร์มประเมินผู้เข้าสอบปี 2567", layout="wide")
 st.title("ฟอร์มประเมินผู้เข้าสอบปี 2567")
 
-# เชื่อม Google Sheets
-scope = ["https://www.googleapis.com/auth/spreadsheets",
-         "https://www.googleapis.com/auth/drive.file",
-         "https://www.googleapis.com/auth/drive"]
-creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"], scopes=scope
-)
-client = gspread.authorize(creds)
+SPREADSHEET_KEY = "16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw"
+WORKSHEET_NAME = "A1"
 
-try:
-    spreadsheet = client.open_by_key("16QNx4xaRjgvPnimZvS5nVA8HPcDTWg98QXKnCgWa7Xw")
-    st.success("✅ เชื่อมต่อ Google Sheets ได้สำเร็จ")
-    sheet = spreadsheet.worksheet("A1")  # หรือ .sheet1 ถ้าใช้ default sheet
-except Exception as e:
-    st.error("❌ ไม่สามารถเชื่อม Google Sheets ได้:")
-    st.code(traceback.format_exc())
-    st.stop()
+# ฟังก์ชันเชื่อม Google Sheets
+def connect_sheet():
+    try:
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scope
+        )
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(SPREADSHEET_KEY)
+        return spreadsheet.worksheet(WORKSHEET_NAME)
+    except Exception as e:
+        st.error("❌ ไม่สามารถเชื่อม Google Sheets ได้:")
+        st.code(traceback.format_exc())
+        st.stop()
 
-# ฟังก์ชันโหลดข้อมูลจาก Sheet (cache ไว้ 5 นาที)
+sheet = connect_sheet()
+st.success("✅ เชื่อมต่อ Google Sheets ได้สำเร็จ")
+
+# โหลดข้อมูลจาก Sheet (Cache 5 นาที)
 @st.cache_data(ttl=300)
-def load_existing_records(sheet):
-    return sheet.get_all_records()
+def load_existing_records():
+    try:
+        sheet_cached = connect_sheet()
+        return sheet_cached.get_all_records()
+    except Exception as e:
+        st.warning("⚠️ โหลดข้อมูลเก่าล้มเหลว (แต่อาจยังเขียนได้)")
+        return []
 
-# ฟังก์ชันค้นหาแถว
+# ค้นหาแถวที่มีข้อมูลเดิม
 def find_existing_row(records, exam_id, committee_id):
     for i, row in enumerate(records, start=2):  # row 1 เป็น header
         if str(row.get("exam_id", "")) == exam_id and str(row.get("committee_id", "")) == committee_id:
             return i
     return None
 
-# โหลดข้อมูลจาก CSV
+# โหลดตารางสอบจาก CSV
 @st.cache_data
 def load_exam_data():
     return pd.read_csv("exam_schedule.csv", dtype=str)
 
 data = load_exam_data()
-
-# สร้าง dictionary จาก exam_id เพื่อดึงชื่อและเวลาสอบ
 exam_dict = dict(zip(data["exam_id"], zip(data["name"], data["time"])))
 
-# ฟอร์มเลือกข้อมูลทั่วไป
+# ===== ฟอร์มข้อมูลทั่วไป =====
 col1, col2, col3 = st.columns(3)
 with col1:
     exam_id = st.selectbox("เลือกเลขประจำตัวสอบ", list(exam_dict.keys()))
@@ -57,9 +67,7 @@ with col2:
 with col3:
     exam_date = st.date_input("วันที่สอบ", datetime.today())
 
-# ดึงชื่อและเวลาสอบอัตโนมัติจาก CSV
 default_name, default_time = exam_dict.get(exam_id, ("", ""))
-
 col4, col5 = st.columns(2)
 with col4:
     name = st.text_input("ชื่อผู้เข้าสอบ", value=default_name)
@@ -69,7 +77,7 @@ with col5:
 st.divider()
 st.subheader("กรุณาให้คะแนนแต่ละหัวข้อ (0 - 5)")
 
-# ใช้ radio แทน slider
+# ===== แบบประเมิน =====
 def radio_group(title, questions):
     st.markdown(f"### {title}")
     total = 0
@@ -78,7 +86,6 @@ def radio_group(title, questions):
         total += score
     return total
 
-# หัวข้อการประเมิน
 sum1 = radio_group("1. ลักษณะท่าทางและระเบียบวินัย", [
     "1.1 ท่าทางสง่า", "1.2 สะอาดเรียบร้อย", "1.3 เคารพ", "1.4 ควบคุมอารมณ์"])
 sum2 = radio_group("2. ปฏิกิริยาไหวพริบ", [
@@ -95,8 +102,8 @@ st.success(f"คะแนนรวมทั้งหมด: {total_score} คะ
 
 comment = st.text_area("ความคิดเห็นเพิ่มเติม", "")
 
-# โหลดข้อมูลเดิมจาก Sheet (ครั้งเดียว)
-records = load_existing_records(sheet)
+# ===== ตรวจสอบข้อมูลซ้ำ =====
+records = load_existing_records()
 existing_row = find_existing_row(records, exam_id, committee_id)
 confirm_update = None
 
@@ -109,6 +116,7 @@ if existing_row:
         key="confirm_update_radio"
     )
 
+# ===== บันทึกข้อมูล =====
 if st.button("บันทึกคะแนน"):
     new_row = [
         exam_id, committee_id, name,
@@ -118,19 +126,18 @@ if st.button("บันทึกคะแนน"):
     ]
 
     try:
-        if existing_row:
-            if confirm_update == "ใช่":
-                sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
-                st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
-                st.toast("อัปเดตข้อมูลสำเร็จ", icon="🔄")
-                st.balloons()
-            else:
-                st.info("ℹ️ ยกเลิกการอัปเดตคะแนน")
-        else:
+        if existing_row and confirm_update == "ใช่":
+            sheet.update(f"A{existing_row}:M{existing_row}", [new_row])
+            st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
+            st.toast("อัปเดตข้อมูลสำเร็จ", icon="🔄")
+            st.balloons()
+        elif not existing_row:
             sheet.append_row(new_row)
             st.success("✅ บันทึกคะแนนเรียบร้อยแล้วที่ Google Sheets!")
             st.toast("บันทึกข้อมูลใหม่สำเร็จ", icon="📥")
             st.balloons()
+        else:
+            st.info("ℹ️ ยกเลิกการอัปเดตคะแนน")
     except Exception as e:
         st.error("❌ เกิดข้อผิดพลาดระหว่างบันทึกข้อมูล")
         st.code(traceback.format_exc())
