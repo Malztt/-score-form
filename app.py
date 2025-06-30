@@ -87,36 +87,30 @@ record = next(
 
 def load_scores_to_session(record):
     for q in all_questions:
-        if q not in st.session_state:
-            try:
-                st.session_state[q] = int(record.get(q, 0))
-            except:
-                st.session_state[q] = 0
-    if "comment" not in st.session_state:
-        st.session_state["comment"] = record.get("comment", "")
+        try:
+            st.session_state[q] = int(record.get(q, 0))
+        except:
+            st.session_state[q] = 0
+    st.session_state["comment"] = record.get("comment", "")
 
 def clear_scores_session_state():
     for q in all_questions:
         st.session_state[q] = 0
     st.session_state["comment"] = ""
 
-# เช็คและเคลียร์ session_state เมื่อเปลี่ยน exam_id หรือ committee_id
 if "prev_exam_id" not in st.session_state:
     st.session_state["prev_exam_id"] = None
 if "prev_committee_id" not in st.session_state:
     st.session_state["prev_committee_id"] = None
 
 if (st.session_state["prev_exam_id"] != exam_id) or (st.session_state["prev_committee_id"] != committee_id):
-    clear_scores_session_state()
     st.session_state["prev_exam_id"] = exam_id
     st.session_state["prev_committee_id"] = committee_id
 
-# โหลดคะแนนถ้ามี record จริง
-if record:
-    load_scores_to_session(record)
-else:
-    # ถ้าไม่มี record ให้ตั้งเป็น 0 แต่ session_state อาจเคลียร์ไปแล้วข้างบน
-    pass
+    if record:
+        load_scores_to_session(record)
+    else:
+        clear_scores_session_state()
 
 # ---------- RADIO GROUP ----------
 def radio_group(title, questions):
@@ -126,8 +120,8 @@ def radio_group(title, questions):
         score = st.radio(
             q,
             options=[0, 1, 2, 3, 4, 5],
-            horizontal=True,
             index=st.session_state.get(q, 0),
+            horizontal=True,
             key=q
         )
         total += score
@@ -167,6 +161,13 @@ if existing_row:
         key="confirm_update_radio"
     )
 
+def col_num_to_letter(n):
+    string = ""
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        string = chr(65 + remainder) + string
+    return string
+
 # ---------- SUBMIT ----------
 if st.button("บันทึกคะแนน"):
     new_row = [
@@ -181,7 +182,7 @@ if st.button("บันทึกคะแนน"):
 
     try:
         if existing_row and confirm_update == "ใช่":
-            end_col = chr(ord('A') + len(new_row) - 1)
+            end_col = col_num_to_letter(len(new_row))
             sheet.update(f"A{existing_row}:{end_col}{existing_row}", [new_row])
             st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
             st.toast("อัปเดตข้อมูลสำเร็จ", icon="🔄")
