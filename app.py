@@ -87,26 +87,35 @@ record = next(
 
 def load_scores_to_session(record):
     for q in all_questions:
-        st.session_state[q] = int(record.get(q, 0))
-    st.session_state["comment"] = record.get("comment", "")
+        if q not in st.session_state:
+            try:
+                st.session_state[q] = int(record.get(q, 0))
+            except:
+                st.session_state[q] = 0
+    if "comment" not in st.session_state:
+        st.session_state["comment"] = record.get("comment", "")
 
 if record:
-    if not any(q in st.session_state for q in all_questions):
-        load_scores_to_session(record)
+    load_scores_to_session(record)
 else:
     for q in all_questions:
-        st.session_state[q] = 0
-    st.session_state["comment"] = ""
+        if q not in st.session_state:
+            st.session_state[q] = 0
+    if "comment" not in st.session_state:
+        st.session_state["comment"] = ""
 
 # ---------- RADIO GROUP ----------
 def radio_group(title, questions):
     st.markdown(f"### {title}")
     total = 0
     for q in questions:
-        score = st.radio(q, [0, 1, 2, 3, 4, 5],
-                         horizontal=True,
-                         index=st.session_state.get(q, 0),
-                         key=q)
+        score = st.radio(
+            q,
+            options=[0, 1, 2, 3, 4, 5],
+            horizontal=True,
+            index=st.session_state.get(q, 0),
+            key=q
+        )
         total += score
     return total
 
@@ -158,7 +167,8 @@ if st.button("บันทึกคะแนน"):
 
     try:
         if existing_row and confirm_update == "ใช่":
-            sheet.update(f"A{existing_row}", [new_row])
+            end_col = chr(ord('A') + len(new_row) - 1)
+            sheet.update(f"A{existing_row}:{end_col}{existing_row}", [new_row])
             st.success("✅ อัปเดตคะแนนเรียบร้อยแล้วใน Google Sheets!")
             st.toast("อัปเดตข้อมูลสำเร็จ", icon="🔄")
             st.balloons()
